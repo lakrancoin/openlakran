@@ -103,20 +103,20 @@ work without database, setup frontend, and synced and running monero blockchain.
 sudo apt install libmysql++-dev
 
 
-# go to home folder if still in ~/monero
+# go to home folder if still in ~/lakran
 cd ~
 
 # download the source code of the devel branch
-git clone --recursive https://github.com/moneroexamples/openmonero.git
+git clone --recursive https://github.com/lakrancoin/openlakran.git
 
-cd openmonero
+cd openlakran
 
 mkdir build && cd build
 
 cmake ..
 
 # altearnatively can use cmake -DMONERO_DIR=/path/to/monero_folder ..
-# if monero is not in ~/monero
+# if lakran is not in ~/lakran
 
 make
 ```
