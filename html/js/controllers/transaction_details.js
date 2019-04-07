@@ -28,8 +28,6 @@ thinwalletCtrls.controller('TransactionDetailsCtrl', function ($scope,
     $scope.tx_age           = "";
     $scope.payment_id       = "";
     $scope.tx_amount        = "";
-    $scope.tx_version       = "";
-    $scope.rct_type         = "";
 
     $scope.fetching = true;
 
@@ -84,13 +82,11 @@ thinwalletCtrls.controller('TransactionDetailsCtrl', function ($scope,
             $scope.tx_height        = data.tx_height === -1 ? "N.A" :data.tx_height;
             $scope.tx_pub_key       = data.pub_key;
             $scope.coinbase         = data.coinbase;
-            $scope.timestamp        = new Date(data.timestamp);
+            $scope.timestamp        = new Date(data.timestamp * 1000);
             $scope.no_outputs       = data.num_of_outputs;
             $scope.no_inputs        = data.num_of_inputs;
-            $scope.tx_version       = data.tx_version;
-            $scope.rct_type         = data.rct_type;
 
-            var age_duration = moment.duration(new Date() - new Date(data.timestamp));
+            var age_duration = moment.duration(new Date() - new Date(data.timestamp * 1000));
 
             $scope.tx_age = age_duration.humanize();
 

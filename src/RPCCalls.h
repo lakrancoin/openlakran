@@ -6,10 +6,9 @@
 #ifndef CROWXMR_RPCCALLS_H
 #define CROWXMR_RPCCALLS_H
 
-#include "src/monero_headers.h"
+#include "monero_headers.h"
 
 #include <mutex>
-#include <chrono>
 
 namespace xmreg
 {
@@ -18,51 +17,62 @@ using namespace cryptonote;
 using namespace crypto;
 using namespace std;
 
-using namespace std::chrono_literals;
 
-class RPCCalls
+class rpccalls
 {
-    string deamon_url;
+    string deamon_url ;
     uint64_t timeout_time;
 
-    chrono::seconds rpc_timeout;
+    std::chrono::milliseconds timeout_time_ms;
 
     epee::net_utils::http::url_content url;
 
     epee::net_utils::http::http_simple_client m_http_client;
-
     std::mutex m_daemon_rpc_mutex;
 
     string port;
 
 public:
 
-    RPCCalls(string _deamon_url = "http:://127.0.0.1:18081",
-             chrono::seconds _timeout = 3min + 30s);
+    rpccalls(string _deamon_url = "http:://127.0.0.1:18081",
+             uint64_t _timeout = 200000);
 
-    virtual bool
+    bool
     connect_to_monero_deamon();
+    uint64_t
+    get_current_height();
 
-    virtual bool
+    bool
+    get_mempool(vector<tx_info>& mempool_txs);
+
+    bool
+    get_random_outs_for_amounts(
+            const vector<uint64_t>& amounts,
+            const uint64_t& outs_count,
+            vector<COMMAND_RPC_GET_RANDOM_OUTPUTS_FOR_AMOUNTS::outs_for_amount>& found_outputs,
+            string& error_msg);
+    /*
+     * Not finished. get_random_outs_for_amounts is used instead of this.
+     */
+    bool
+    get_out(const uint64_t amount,
+            const uint64_t global_output_index,
+            COMMAND_RPC_GET_OUTPUTS_BIN::outkey& output_key);
+
+    bool
     commit_tx(const string& tx_blob,
               string& error_msg,
               bool do_not_relay = false);
 
-    virtual bool
+    bool
+    get_dynamic_per_kb_fee_estimate(
+            uint64_t grace_blocks,
+            uint64_t& fee,
+            string& error_msg);
+
+    bool
     commit_tx(tools::wallet2::pending_tx& ptx,
               string& error_msg);
-
-    virtual bool
-    get_current_height(uint64_t& current_height);
-
-    virtual ~RPCCalls() = default;
-
-protected:
-
-    template <typename Command>
-    bool
-    check_if_response_is_ok(Command const& res,
-                            string& error_msg) const;
 };
 
 

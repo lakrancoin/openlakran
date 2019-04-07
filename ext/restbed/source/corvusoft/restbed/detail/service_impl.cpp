@@ -1,5 +1,5 @@
 /*
- * Copyright 2013-2017, Corvusoft Ltd, All Rights Reserved.
+ * Copyright 2013-2016, Corvusoft Ltd, All Rights Reserved.
  */
 
 //System Includes
@@ -8,8 +8,6 @@
 #include <sstream>
 #include <utility>
 #include <ciso646>
-#include <cstdlib>
-#include <clocale>
 #include <stdexcept>
 #include <algorithm>
 #include <functional>
@@ -39,7 +37,6 @@
 //System Namespaces
 using std::set;
 using std::map;
-using std::free;
 using std::pair;
 using std::bind;
 using std::regex;
@@ -48,7 +45,6 @@ using std::smatch;
 using std::istream;
 using std::find_if;
 using std::function;
-using std::setlocale;
 using std::multimap;
 using std::to_string;
 using std::exception;
@@ -300,7 +296,6 @@ namespace restbed
                         session->m_pimpl->m_error_handler = m_error_handler;
                         session->m_pimpl->m_request = make_shared< Request >( );
                         session->m_pimpl->m_request->m_pimpl->m_socket = connection;
-                        session->m_pimpl->m_request->m_pimpl->m_socket->m_error_handler = m_error_handler;
                         session->m_pimpl->m_request->m_pimpl->m_buffer = make_shared< asio::streambuf >( );
                         session->m_pimpl->m_keep_alive_callback = bind( &ServiceImpl::parse_request, this, _1, _2, _3 );
                         session->m_pimpl->m_request->m_pimpl->m_socket->read( session->m_pimpl->m_request->m_pimpl->m_buffer, "\r\n\r\n", bind( &ServiceImpl::parse_request, this, _1, _2, session ) );
@@ -330,7 +325,7 @@ namespace restbed
             
             smatch matches;
             string sanitised_path = "";
-            static const regex pattern( "^\\{[a-zA-Z0-9_\\-]+: ?(.*)\\}$" );
+            static const regex pattern( "^\\{[a-zA-Z0-9]+: ?(.*)\\}$" );
             
             for ( auto folder : String::split( path, '/' ) )
             {
@@ -536,7 +531,6 @@ namespace restbed
                     session->m_pimpl->m_error_handler = m_error_handler;
                     session->m_pimpl->m_request = make_shared< Request >( );
                     session->m_pimpl->m_request->m_pimpl->m_socket = connection;
-                    session->m_pimpl->m_request->m_pimpl->m_socket->m_error_handler = m_error_handler;
                     session->m_pimpl->m_request->m_pimpl->m_buffer = make_shared< asio::streambuf >( );
                     session->m_pimpl->m_keep_alive_callback = bind( &ServiceImpl::parse_request, this, _1, _2, _3 );
                     session->m_pimpl->m_request->m_pimpl->m_socket->read( session->m_pimpl->m_request->m_pimpl->m_buffer, "\r\n\r\n", bind( &ServiceImpl::parse_request, this, _1, _2, session ) );
@@ -558,7 +552,7 @@ namespace restbed
         void ServiceImpl::extract_path_parameters( const string& sanitised_path, const shared_ptr< const Request >& request ) const
         {
             smatch matches;
-            static const regex pattern( "^\\{([a-zA-Z0-9_\\-]+): ?.*\\}$" );
+            static const regex pattern( "^\\{([a-zA-Z0-9]+): ?.*\\}$" );
             
             const auto folders = String::split( request->get_path( ), '/' );
             const auto declarations = String::split( m_settings->get_root( ) + "/" + m_resource_paths.at( sanitised_path ), '/' );
@@ -745,14 +739,9 @@ namespace restbed
                 
                 session->m_pimpl->m_request->m_pimpl->m_path = Uri::decode( uri.get_path( ) );
                 session->m_pimpl->m_request->m_pimpl->m_method = items.at( "method" );
+                session->m_pimpl->m_request->m_pimpl->m_version = stod( items.at( "version" ) );
                 session->m_pimpl->m_request->m_pimpl->m_headers = parse_request_headers( stream );
                 session->m_pimpl->m_request->m_pimpl->m_query_parameters = uri.get_query_parameters( );
-                
-                char* locale = strdup( setlocale( LC_NUMERIC, nullptr ) );
-                setlocale( LC_NUMERIC, "C" );
-                session->m_pimpl->m_request->m_pimpl->m_version = stod( items.at( "version" ) );
-                setlocale( LC_NUMERIC, locale );
-                free( locale );
                 
                 authenticate( session );
             }

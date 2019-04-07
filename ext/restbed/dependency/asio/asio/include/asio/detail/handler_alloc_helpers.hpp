@@ -2,7 +2,7 @@
 // detail/handler_alloc_helpers.hpp
 // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 //
-// Copyright (c) 2003-2017 Christopher M. Kohlhoff (chris at kohlhoff dot com)
+// Copyright (c) 2003-2016 Christopher M. Kohlhoff (chris at kohlhoff dot com)
 //
 // Distributed under the Boost Software License, Version 1.0. (See accompanying
 // file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
@@ -18,7 +18,6 @@
 #include "asio/detail/config.hpp"
 #include "asio/detail/memory.hpp"
 #include "asio/detail/noncopyable.hpp"
-#include "asio/detail/recycling_allocator.hpp"
 #include "asio/associated_allocator.hpp"
 #include "asio/handler_alloc_hook.hpp"
 
@@ -60,8 +59,6 @@ template <typename Handler, typename T>
 class hook_allocator
 {
 public:
-  typedef T value_type;
-
   template <typename U>
   struct rebind
   {
@@ -98,8 +95,6 @@ template <typename Handler>
 class hook_allocator<Handler, void>
 {
 public:
-  typedef void value_type;
-
   template <typename U>
   struct rebind
   {
@@ -129,9 +124,7 @@ public:
   { \
     typedef typename ::asio::associated_allocator<Handler, \
       ::asio::detail::hook_allocator<Handler, \
-        void> >::type associated_allocator_type; \
-    typedef ASIO_REBIND_ALLOC( \
-      associated_allocator_type, op) allocator_type; \
+        void> >::type::template rebind<op>::other allocator_type; \
     Handler* h; \
     op* v; \
     op* p; \
@@ -165,30 +158,18 @@ public:
   } \
   /**/
 
-#define ASIO_DEFINE_HANDLER_ALLOCATOR_PTR(op) \
+#define ASIO_DEFINE_HANDLER_ALLOCATOR_PTR(op, alloc) \
   struct ptr \
   { \
-    const Alloc* a; \
+    typename alloc::template rebind<op>::other a; \
     void* v; \
     op* p; \
     ~ptr() \
     { \
       reset(); \
     } \
-    static op* allocate(const Alloc& a) \
-    { \
-      typedef typename ::asio::detail::get_recycling_allocator< \
-        Alloc>::type recycling_allocator_type; \
-      ASIO_REBIND_ALLOC(recycling_allocator_type, op) a1( \
-            ::asio::detail::get_recycling_allocator<Alloc>::get(a)); \
-      return a1.allocate(1); \
-    } \
     void reset() \
     { \
-      typedef typename ::asio::detail::get_recycling_allocator< \
-        Alloc>::type recycling_allocator_type; \
-      ASIO_REBIND_ALLOC(recycling_allocator_type, op) a1( \
-            ::asio::detail::get_recycling_allocator<Alloc>::get(*a)); \
       if (p) \
       { \
         p->~op(); \
@@ -196,7 +177,7 @@ public:
       } \
       if (v) \
       { \
-        a1.deallocate(static_cast<op*>(v), 1); \
+        a.deallocate(static_cast<op*>(v), 1); \
         v = 0; \
       } \
     } \
