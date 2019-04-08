@@ -9,7 +9,7 @@ set(CMAKE_CXX_STANDARD 14)
 set(CXX_STANDARD_REQUIRED ON)
 
 if (NOT MONERO_DIR)
-    set(MONERO_DIR ~/monero)
+    set(MONERO_DIR ~/lakran)
 endif()
 
 option(BUILD_XMREGCORE_TESTS "Build tests for the project" ON)
