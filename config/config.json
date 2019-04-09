@@ -2,9 +2,9 @@
   "daemon-url" :
   {
     "_comment" : "RPC urls to monero deamon",
-    "mainnet"  : "http://127.0.0.1:18081",
-    "testnet"  : "http://127.0.0.1:28081",
-    "stagenet" : "http://127.0.0.1:38081"
+    "mainnet"  : "http://127.0.0.1:14081",
+    "testnet"  : "http://127.0.0.1:24081",
+    "stagenet" : "http://127.0.0.1:34081"
   },
   "blockchain-path" :
   {
@@ -18,7 +18,7 @@
     "_comment" : "how should the backend connect to the mysql database",
     "url"      : "127.0.0.1",
     "port"     : 3306,
-    "dbname"   : "openmonero",
+    "dbname"   : "openlakran",
     "user"     : "root",
     "password" : "root"
   },
