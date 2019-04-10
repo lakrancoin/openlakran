@@ -729,7 +729,7 @@ YourMoneroRequests::get_random_outs(const shared_ptr< Session > session, const B
         return;
     };
 
-    if (count > 21)
+    if (count > 41)
     {
         cerr << "Request ring size too big" << '\n';
         j_response["status"] = "error";
@@ -821,17 +821,56 @@ YourMoneroRequests::submit_raw_tx(const shared_ptr< Session > session, const Byt
 
     string error_msg;
 
+    // before we submit the tx into the deamon, we are going to do a few checks.
+    // first, we parse the hexbuffer submmited by the frontend into binary buffer block
+    // second, we are going to check if we can construct valid transaction object
+    // fromt that binary buffer.
+    // third, we are going to check if any key image in this tx is in any of the txs
+    // in the mempool. This allows us to make a clear comment that the tx
+    // uses outputs just spend. This happens we a users submits few txs, one after another
+    // before previous txs get included in a block and are still present in the mempool.
+
+    std::string tx_blob;
+
+    if(!epee::string_tools::parse_hexstr_to_binbuff(raw_tx_blob, tx_blob))
+    {
+        j_response["status"] = "error";
+        j_response["error"]  = "Tx faild parse_hexstr_to_binbuff";
+        session_close(session, j_response.dump());
+        return;
+    }
+
+    transaction tx_to_be_submitted;
+
+    if (!parse_and_validate_tx_from_blob(tx_blob, tx_to_be_submitted))
+    {
+        j_response["status"] = "error";
+        j_response["error"]  = "Tx faild parse_and_validate_tx_from_blob";
+        session_close(session, j_response.dump());
+        return;
+    }
+
+    if (CurrentBlockchainStatus::find_key_images_in_mempool(tx_to_be_submitted))
+    {
+        j_response["status"] = "error";
+        j_response["error"]  = "Tx uses your outputs that area already in the mempool. "
+                               "Please wait till your previous tx(s) get mined";
+        session_close(session, j_response.dump());
+        return;
+    }
+
     if (!CurrentBlockchainStatus::commit_tx(
             raw_tx_blob, error_msg,
             CurrentBlockchainStatus::do_not_relay))
     {
         j_response["status"] = "error";
         j_response["error"]  = error_msg;
+        session_close(session, j_response.dump());
+        return;
     }
-    else
-    {
-        j_response["status"] = "success";
-    }
+
+    j_response["status"] = "success";
+
 
     string response_body = j_response.dump();
 
@@ -1080,6 +1119,9 @@ YourMoneroRequests::import_recent_wallet_request(const shared_ptr< Session > ses
     no_blocks_to_import = std::min(no_blocks_to_import,
                                    CurrentBlockchainStatus::max_number_of_blocks_to_import);
 
+    no_blocks_to_import = std::min(no_blocks_to_import,
+                                   CurrentBlockchainStatus::get_current_blockchain_height());
+
     XmrAccount acc;
 
     if (xmr_accounts->select(xmr_address, acc))
@@ -1089,7 +1131,7 @@ YourMoneroRequests::import_recent_wallet_request(const shared_ptr< Session > ses
         // make sure scanned_block_height is larger than  no_blocks_to_import so we dont
         // end up with overflowing uint64_t.
 
-        if (updated_acc.scanned_block_height > no_blocks_to_import)
+        if (updated_acc.scanned_block_height >= no_blocks_to_import)
         {
             // repetead calls to import_recent_wallet_request will be moving the scanning backward.
             // not sure yet if any protection is needed to make sure that a user does not
@@ -1312,7 +1354,8 @@ YourMoneroRequests::get_tx(const shared_ptr< Session > session, const Bytes & bo
         // implementation in the frontend.
         if (CurrentBlockchainStatus::get_xmr_address_viewkey(xmr_address, address_info, viewkey))
         {
-            OutputInputIdentification oi_identification {&address_info, &viewkey, &tx};
+            OutputInputIdentification oi_identification {&address_info, &viewkey, &tx,
+                                                         tx_hash, coinbase};
 
             oi_identification.identify_outputs();
 
@@ -1405,7 +1448,7 @@ YourMoneroRequests::get_tx(const shared_ptr< Session > session, const Bytes & bo
 
                     // we have to redo this info from basically from scrach.
 
-                    vector<pair<string, uint64_t>> known_outputs_keys;
+                    unordered_map<public_key, uint64_t> known_outputs_keys;
 
                     if (CurrentBlockchainStatus::get_known_outputs_keys(
                             xmr_address, known_outputs_keys))
@@ -1417,7 +1460,7 @@ YourMoneroRequests::get_tx(const shared_ptr< Session > session, const Bytes & bo
                         // Class that is resposnible for idenficitaction of our outputs
                         // and inputs in a given tx.
                         OutputInputIdentification oi_identification
-                                {&address_info, &viewkey, &tx};
+                                {&address_info, &viewkey, &tx, tx_hash, coinbase};
 
                         // no need mutex here, as this will be exectued only after
                         // the above. there is no threads here.
@@ -1435,7 +1478,9 @@ YourMoneroRequests::get_tx(const shared_ptr< Session > session, const Bytes & bo
                             // tx public key and its index in that tx
                             XmrOutput out;
 
-                            if (xmr_accounts->output_exists(in_info.out_pub_key, out))
+                            string out_pub_key = pod_to_hex(in_info.out_pub_key);
+
+                            if (xmr_accounts->output_exists(out_pub_key, out))
                             {
                                 total_spent += out.amount;
 
@@ -1618,8 +1663,6 @@ YourMoneroRequests::login_and_start_search_thread(
 
             if (CurrentBlockchainStatus::start_tx_search_thread(acc))
             {
-                cout << "Search thread started" << endl;
-
                 j_response["status"]      = "success";
                 j_response["new_address"] = false;
 

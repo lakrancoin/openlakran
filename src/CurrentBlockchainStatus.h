@@ -36,8 +36,12 @@ struct CurrentBlockchainStatus
 
     // vector of mempool transactions that all threads
     // can refer to
-    //           <recieved_time, transaction>
+    //                               recieved_time, tx
     using mempool_txs_t = vector<pair<uint64_t, transaction>>;
+
+
+    //                            tx_hash      , tx,          height , timestamp, is_coinbase
+    using txs_tuple_t = std::tuple<crypto::hash, transaction, uint64_t, uint64_t, bool>;
 
     static string blockchain_path;
 
@@ -54,6 +58,8 @@ struct CurrentBlockchainStatus
     static bool is_running;
 
     static uint64_t refresh_block_status_every_seconds;
+
+    static uint64_t blocks_search_lookahead;
 
     static uint64_t max_number_of_blocks_to_import;
 
@@ -105,8 +111,18 @@ struct CurrentBlockchainStatus
     static bool
     get_block(uint64_t height, block &blk);
 
+    static vector<block>
+    get_blocks_range(uint64_t const& h1, uint64_t const& h2);
+
     static bool
-    get_block_txs(const block &blk, list <transaction> &blk_txs);
+    get_block_txs(const block &blk,
+                  list<transaction> &blk_txs,
+                  list<crypto::hash>& missed_txs);
+
+    static bool
+    get_txs(vector<crypto::hash> const& txs_to_get,
+            list<transaction>& txs,
+            list<crypto::hash>& missed_txs);
 
     static bool
     tx_exist(const crypto::hash& tx_hash);
@@ -199,6 +215,12 @@ struct CurrentBlockchainStatus
                        transaction& tx);
 
     static bool
+    find_key_images_in_mempool(std::vector<txin_v> const& vin);
+
+    static bool
+    find_key_images_in_mempool(transaction const& tx);
+
+    static bool
     get_tx(crypto::hash const& tx_hash, transaction& tx);
 
     static bool
@@ -217,7 +239,7 @@ struct CurrentBlockchainStatus
 
     static bool
     get_known_outputs_keys(string const& address,
-                           vector<pair<string, uint64_t>>& known_outputs_keys);
+                           unordered_map<public_key, uint64_t>& known_outputs_keys);
 
     static void
     clean_search_thread_map();
@@ -230,6 +252,10 @@ struct CurrentBlockchainStatus
     construct_output_rct_field(
             const uint64_t global_amount_index,
             const uint64_t out_amount);
+
+
+    static bool
+    get_txs_in_blocks(vector<block> const& blocks, vector<txs_tuple_t>& txs_data);
 
 };
 
