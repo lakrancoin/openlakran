@@ -2,9 +2,9 @@
   "daemon-url" :
   {
     "_comment" : "RPC urls to monero deamon",
-    "mainnet"  : "http://127.0.0.1:14081",
-    "testnet"  : "http://127.0.0.1:24081",
-    "stagenet" : "http://127.0.0.1:34081"
+    "mainnet"  : "http://127.0.0.1:18081",
+    "testnet"  : "http://127.0.0.1:28081",
+    "stagenet" : "http://127.0.0.1:38081"
   },
   "blockchain-path" :
   {
@@ -18,7 +18,16 @@
     "_comment" : "how should the backend connect to the mysql database",
     "url"      : "127.0.0.1",
     "port"     : 3306,
-    "dbname"   : "openlakran",
+    "dbname"   : "openmonero",
+    "user"     : "root",
+    "password" : "root"
+  },
+  "database_test":
+  {
+    "_comment" : "how should the backend connect to the test mysql database",
+    "url"      : "127.0.0.1",
+    "port"     : 3306,
+    "dbname"   : "openmonero_test",
     "user"     : "root",
     "password" : "root"
   },
@@ -44,8 +53,9 @@
     }
   },
   "refresh_block_status_every_seconds" : 10,
-  "search_thread_life_in_seconds"      : 300,
-  "max_number_of_blocks_to_import"     : 22000,
+  "blocks_search_lookahead"            : 200,
+  "search_thread_life_in_seconds"      : 120,
+  "max_number_of_blocks_to_import"     : 132000,
   "ssl" :
   {
     "enable" : false,
