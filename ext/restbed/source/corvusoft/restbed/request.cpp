@@ -1,5 +1,5 @@
 /*
- * Copyright 2013-2017, Corvusoft Ltd, All Rights Reserved.
+ * Copyright 2013-2016, Corvusoft Ltd, All Rights Reserved.
  */
 
 //System Includes
@@ -21,8 +21,6 @@
 //System Namespaces
 using std::map;
 using std::pair;
-using std::stof;
-using std::stod;
 using std::string;
 using std::function;
 using std::multimap;
@@ -30,8 +28,6 @@ using std::make_pair;
 using std::unique_ptr;
 using std::shared_ptr;
 using std::make_shared;
-using std::out_of_range;
-using std::invalid_argument;
 
 //Project Namespaces
 using restbed::Common;
@@ -131,46 +127,6 @@ namespace restbed
         body = ( transform == nullptr ) ? String::to_string( m_pimpl->m_body ) : transform( m_pimpl->m_body );
     }
     
-    float Request::get_header( const string& name, const float default_value ) const
-    {
-        float header = 0;
-        
-        try
-        {
-            header = stof( get_header( name ) );
-        }
-        catch ( const out_of_range& )
-        {
-            header = default_value;
-        }
-        catch ( const invalid_argument& )
-        {
-            header = default_value;
-        }
-        
-        return header;
-    }
-    
-    double Request::get_header( const string& name, const double default_value ) const
-    {
-        double header = 0;
-        
-        try
-        {
-            header = stod( get_header( name ) );
-        }
-        catch ( const out_of_range& )
-        {
-            header = default_value;
-        }
-        catch ( const invalid_argument& )
-        {
-            header = default_value;
-        }
-        
-        return header;
-    }
-    
     string Request::get_header( const string& name, const string& default_value ) const
     {
         if ( name.empty( ) )
@@ -200,46 +156,6 @@ namespace restbed
         return Common::get_parameters( name, m_pimpl->m_headers );
     }
     
-    float Request::get_query_parameter( const string& name, const float default_value ) const
-    {
-        float parameter = 0;
-        
-        try
-        {
-            parameter = stof( get_query_parameter( name ) );
-        }
-        catch ( const out_of_range& )
-        {
-            parameter = default_value;
-        }
-        catch ( const invalid_argument& )
-        {
-            parameter = default_value;
-        }
-        
-        return parameter;
-    }
-    
-    double Request::get_query_parameter( const string& name, const double default_value ) const
-    {
-        double parameter = 0;
-        
-        try
-        {
-            parameter = stod( get_query_parameter( name ) );
-        }
-        catch ( const out_of_range& )
-        {
-            parameter = default_value;
-        }
-        catch ( const invalid_argument& )
-        {
-            parameter = default_value;
-        }
-        
-        return parameter;
-    }
-    
     string Request::get_query_parameter( const string& name, const string& default_value ) const
     {
         if ( name.empty( ) )
@@ -267,46 +183,6 @@ namespace restbed
     multimap< string, string > Request::get_query_parameters( const string& name ) const
     {
         return Common::get_parameters( name, m_pimpl->m_query_parameters );
-    }
-    
-    float Request::get_path_parameter( const string& name, const float default_value ) const
-    {
-        float parameter = 0;
-        
-        try
-        {
-            parameter = stof( get_path_parameter( name ) );
-        }
-        catch ( const out_of_range& )
-        {
-            parameter = default_value;
-        }
-        catch ( const invalid_argument& )
-        {
-            parameter = default_value;
-        }
-        
-        return parameter;
-    }
-    
-    double Request::get_path_parameter( const string& name, const double default_value ) const
-    {
-        double parameter = 0;
-        
-        try
-        {
-            parameter = stod( get_path_parameter( name ) );
-        }
-        catch ( const out_of_range& )
-        {
-            parameter = default_value;
-        }
-        catch ( const invalid_argument& )
-        {
-            parameter = default_value;
-        }
-        
-        return parameter;
     }
     
     string Request::get_path_parameter( const string& name, const string& default_value ) const
@@ -387,12 +263,12 @@ namespace restbed
     {
         m_pimpl->m_protocol = value;
     }
-    
+
     void Request::add_header( const string& name, const string& value )
     {
         m_pimpl->m_headers.insert( make_pair( name, value ) );
     }
-    
+
     void Request::set_header( const string& name, const string& value )
     {
         m_pimpl->m_headers.erase( name );

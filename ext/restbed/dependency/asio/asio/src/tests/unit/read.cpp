@@ -2,7 +2,7 @@
 // read.cpp
 // ~~~~~~~~
 //
-// Copyright (c) 2003-2017 Christopher M. Kohlhoff (chris at kohlhoff dot com)
+// Copyright (c) 2003-2016 Christopher M. Kohlhoff (chris at kohlhoff dot com)
 //
 // Distributed under the Boost Software License, Version 1.0. (See accompanying
 // file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
@@ -187,8 +187,7 @@ void test_2_arg_vector_buffers_read()
   char read_buf[sizeof(read_data)];
   std::vector<asio::mutable_buffer> buffers;
   buffers.push_back(asio::buffer(read_buf, 32));
-  buffers.push_back(asio::buffer(read_buf, 39) + 32);
-  buffers.push_back(asio::buffer(read_buf) + 39);
+  buffers.push_back(asio::buffer(read_buf) + 32);
 
   s.reset(read_data, sizeof(read_data));
   memset(read_buf, 0, sizeof(read_buf));
@@ -293,8 +292,7 @@ void test_3_arg_nothrow_vector_buffers_read()
   char read_buf[sizeof(read_data)];
   std::vector<asio::mutable_buffer> buffers;
   buffers.push_back(asio::buffer(read_buf, 32));
-  buffers.push_back(asio::buffer(read_buf, 39) + 32);
-  buffers.push_back(asio::buffer(read_buf) + 39);
+  buffers.push_back(asio::buffer(read_buf) + 32);
 
   s.reset(read_data, sizeof(read_data));
   memset(read_buf, 0, sizeof(read_buf));
@@ -584,8 +582,7 @@ void test_3_arg_vector_buffers_read()
   char read_buf[sizeof(read_data)];
   std::vector<asio::mutable_buffer> buffers;
   buffers.push_back(asio::buffer(read_buf, 32));
-  buffers.push_back(asio::buffer(read_buf, 39) + 32);
-  buffers.push_back(asio::buffer(read_buf) + 39);
+  buffers.push_back(asio::buffer(read_buf) + 32);
 
   s.reset(read_data, sizeof(read_data));
   memset(read_buf, 0, sizeof(read_buf));
@@ -1296,8 +1293,7 @@ void test_4_arg_vector_buffers_read()
   char read_buf[sizeof(read_data)];
   std::vector<asio::mutable_buffer> buffers;
   buffers.push_back(asio::buffer(read_buf, 32));
-  buffers.push_back(asio::buffer(read_buf, 39) + 32);
-  buffers.push_back(asio::buffer(read_buf) + 39);
+  buffers.push_back(asio::buffer(read_buf) + 32);
 
   s.reset(read_data, sizeof(read_data));
   memset(read_buf, 0, sizeof(read_buf));
@@ -2055,8 +2051,7 @@ void test_3_arg_vector_buffers_async_read()
   char read_buf[sizeof(read_data)];
   std::vector<asio::mutable_buffer> buffers;
   buffers.push_back(asio::buffer(read_buf, 32));
-  buffers.push_back(asio::buffer(read_buf, 39) + 32);
-  buffers.push_back(asio::buffer(read_buf) + 39);
+  buffers.push_back(asio::buffer(read_buf) + 32);
 
   s.reset(read_data, sizeof(read_data));
   memset(read_buf, 0, sizeof(read_buf));
@@ -3208,8 +3203,7 @@ void test_4_arg_vector_buffers_async_read()
   char read_buf[sizeof(read_data)];
   std::vector<asio::mutable_buffer> buffers;
   buffers.push_back(asio::buffer(read_buf, 32));
-  buffers.push_back(asio::buffer(read_buf, 39) + 32);
-  buffers.push_back(asio::buffer(read_buf) + 39);
+  buffers.push_back(asio::buffer(read_buf) + 32);
 
   s.reset(read_data, sizeof(read_data));
   memset(read_buf, 0, sizeof(read_buf));

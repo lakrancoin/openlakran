@@ -23,13 +23,8 @@ string MySqlConnector::dbname;
 
 MySqlConnector::MySqlConnector()
 {
-    _init();
-}
-
-MySqlConnector::MySqlConnector(Option* _option)
-{
-    conn.set_option(_option);
-    _init();
+    if (!connect())
+        throw std::runtime_error("Connection to Mysql failed!");
 }
 
 bool
@@ -40,15 +35,27 @@ MySqlConnector::connect()
 
     try
     {
-        conn.connect(dbname.c_str(),
-                     url.c_str(),
-                     username.c_str(),
-                     password.c_str(),
-                     port);
+        if (!conn.connect(dbname.c_str(), url.c_str(),
+                          username.c_str(), password.c_str(),
+                          port))
+        {
+            cerr << "Connection to Mysql failed!" << endl;
+            return false;
+        }
     }
     catch (mysqlpp::ConnectionFailed const& e)
     {
         MYSQL_EXCEPTION_MSG(e);
+        return false;
+    }
+    catch (std::exception const& e)
+    {
+        cerr << e.what() << '\n';
+        return false;
+    }
+    catch (...)
+    {
+        cerr << "Unknown exception in MySqlConnector::connect()" << '\n';
         return false;
     }
 
@@ -84,15 +91,5 @@ MySqlConnector::~MySqlConnector()
 {
     conn.disconnect();
 };
-
-void
-MySqlConnector::_init()
-{
-    if (!connect())
-    {
-        cerr << "Connection to Mysql failed!" << endl;
-        throw std::runtime_error("Connection to Mysql failed!");
-    }
-}
 
 }

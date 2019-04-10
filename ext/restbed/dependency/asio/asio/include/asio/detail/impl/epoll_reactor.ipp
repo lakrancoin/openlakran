@@ -2,7 +2,7 @@
 // detail/impl/epoll_reactor.ipp
 // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 //
-// Copyright (c) 2003-2017 Christopher M. Kohlhoff (chris at kohlhoff dot com)
+// Copyright (c) 2003-2016 Christopher M. Kohlhoff (chris at kohlhoff dot com)
 //
 // Distributed under the Boost Software License, Version 1.0. (See accompanying
 // file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
@@ -37,13 +37,11 @@ namespace detail {
 epoll_reactor::epoll_reactor(asio::execution_context& ctx)
   : execution_context_service_base<epoll_reactor>(ctx),
     scheduler_(use_service<scheduler>(ctx)),
-    mutex_(ASIO_CONCURRENCY_HINT_IS_LOCKING(
-          REACTOR_REGISTRATION, scheduler_.concurrency_hint())),
+    mutex_(),
     interrupter_(),
     epoll_fd_(do_epoll_create()),
     timer_fd_(do_timerfd_create()),
-    shutdown_(false),
-    registered_descriptors_mutex_(mutex_.enabled())
+    shutdown_(false)
 {
   // Add the interrupter's descriptor to epoll.
   epoll_event ev = { 0, { 0 } };
@@ -162,8 +160,6 @@ int epoll_reactor::register_descriptor(socket_type descriptor,
     descriptor_data->reactor_ = this;
     descriptor_data->descriptor_ = descriptor;
     descriptor_data->shutdown_ = false;
-    for (int i = 0; i < max_ops; ++i)
-      descriptor_data->try_speculative_[i] = true;
   }
 
   epoll_event ev = { 0, { 0 } };
@@ -205,8 +201,6 @@ int epoll_reactor::register_internal_descriptor(
     descriptor_data->descriptor_ = descriptor;
     descriptor_data->shutdown_ = false;
     descriptor_data->op_queue_[op_type].push(op);
-    for (int i = 0; i < max_ops; ++i)
-      descriptor_data->try_speculative_[i] = true;
   }
 
   epoll_event ev = { 0, { 0 } };
@@ -253,17 +247,11 @@ void epoll_reactor::start_op(int op_type, socket_type descriptor,
         && (op_type != read_op
           || descriptor_data->op_queue_[except_op].empty()))
     {
-      if (descriptor_data->try_speculative_[op_type])
+      if (op->perform())
       {
-        if (reactor_op::status status = op->perform())
-        {
-          if (status == reactor_op::done_and_exhausted)
-            if (descriptor_data->registered_events_ != 0)
-              descriptor_data->try_speculative_[op_type] = false;
-          descriptor_lock.unlock();
-          scheduler_.post_immediate_completion(op, is_continuation);
-          return;
-        }
+        descriptor_lock.unlock();
+        scheduler_.post_immediate_completion(op, is_continuation);
+        return;
       }
 
       if (descriptor_data->registered_events_ == 0)
@@ -594,8 +582,7 @@ int epoll_reactor::do_timerfd_create()
 epoll_reactor::descriptor_state* epoll_reactor::allocate_descriptor_state()
 {
   mutex::scoped_lock descriptors_lock(registered_descriptors_mutex_);
-  return registered_descriptors_.alloc(ASIO_CONCURRENCY_HINT_IS_LOCKING(
-        REACTOR_IO, scheduler_.concurrency_hint()));
+  return registered_descriptors_.alloc();
 }
 
 void epoll_reactor::free_descriptor_state(epoll_reactor::descriptor_state* s)
@@ -687,9 +674,8 @@ struct epoll_reactor::perform_io_cleanup_on_block_exit
   operation* first_op_;
 };
 
-epoll_reactor::descriptor_state::descriptor_state(bool locking)
-  : operation(&epoll_reactor::descriptor_state::do_complete),
-    mutex_(locking)
+epoll_reactor::descriptor_state::descriptor_state()
+  : operation(&epoll_reactor::descriptor_state::do_complete)
 {
 }
 
@@ -706,18 +692,12 @@ operation* epoll_reactor::descriptor_state::perform_io(uint32_t events)
   {
     if (events & (flag[j] | EPOLLERR | EPOLLHUP))
     {
-      try_speculative_[j] = true;
       while (reactor_op* op = op_queue_[j].front())
       {
-        if (reactor_op::status status = op->perform())
+        if (op->perform())
         {
           op_queue_[j].pop();
           io_cleanup.ops_.push(op);
-          if (status == reactor_op::done_and_exhausted)
-          {
-            try_speculative_[j] = false;
-            break;
-          }
         }
         else
           break;

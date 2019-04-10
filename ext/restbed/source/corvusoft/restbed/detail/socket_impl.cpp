@@ -1,5 +1,5 @@
 /*
- * Copyright 2013-2017, Corvusoft Ltd, All Rights Reserved.
+ * Copyright 2013-2016, Corvusoft Ltd, All Rights Reserved.
  */
 
 //System Includes
@@ -25,7 +25,6 @@ using std::to_string;
 using std::error_code;
 using std::shared_ptr;
 using std::make_shared;
-using std::runtime_error;
 using std::placeholders::_1;
 using std::chrono::milliseconds;
 using std::chrono::steady_clock;
@@ -46,8 +45,7 @@ namespace restbed
 {
     namespace detail
     {
-        SocketImpl::SocketImpl( const shared_ptr< tcp::socket >& socket, const shared_ptr< Logger >& logger ) : m_error_handler( nullptr ),
-            m_is_open( socket->is_open( ) ),
+        SocketImpl::SocketImpl( const shared_ptr< tcp::socket >& socket, const shared_ptr< Logger >& logger ) : m_is_open( socket->is_open( ) ),
             m_buffer( nullptr ),
             m_logger( logger ),
             m_timeout( 0 ),
@@ -62,8 +60,7 @@ namespace restbed
             return;
         }
 #ifdef BUILD_SSL
-        SocketImpl::SocketImpl( const shared_ptr< asio::ssl::stream< tcp::socket > >& socket, const shared_ptr< Logger >& logger ) : m_error_handler( nullptr ),
-            m_is_open( socket->lowest_layer( ).is_open( ) ),
+        SocketImpl::SocketImpl( const shared_ptr< asio::ssl::stream< tcp::socket > >& socket, const shared_ptr< Logger >& logger ) : m_is_open( socket->lowest_layer( ).is_open( ) ),
             m_buffer( nullptr ),
             m_logger( logger ),
             m_timeout( 0 ),
@@ -149,10 +146,6 @@ namespace restbed
                         callback( error );
                     } );
                 }
-                else
-                {
-                    callback( error );
-                }
             } );
         }
         
@@ -169,7 +162,7 @@ namespace restbed
             
             m_timer->cancel( );
             m_timer->expires_from_now( m_timeout );
-            m_timer->async_wait( m_strand->wrap( bind( &SocketImpl::connection_timeout_handler, this, shared_from_this( ), _1 ) ) );
+            m_timer->async_wait( m_strand->wrap( bind( &SocketImpl::connection_timeout_handler, shared_from_this( ), _1 ) ) );
 #ifdef BUILD_SSL
             
             if ( m_socket not_eq nullptr )
@@ -220,7 +213,7 @@ namespace restbed
         {
             m_timer->cancel( );
             m_timer->expires_from_now( m_timeout );
-            m_timer->async_wait( bind( &SocketImpl::connection_timeout_handler, this, shared_from_this( ), _1 ) );
+            m_timer->async_wait( bind( &SocketImpl::connection_timeout_handler, shared_from_this( ), _1 ) );
             
             size_t size = 0;
 #ifdef BUILD_SSL
@@ -251,7 +244,7 @@ namespace restbed
         {
             m_timer->cancel( );
             m_timer->expires_from_now( m_timeout );
-            m_timer->async_wait( bind( &SocketImpl::connection_timeout_handler, this, shared_from_this( ), _1 ) );
+            m_timer->async_wait( bind( &SocketImpl::connection_timeout_handler,  shared_from_this( ), _1 ) );
             
 #ifdef BUILD_SSL
             
@@ -303,7 +296,7 @@ namespace restbed
         {
             m_timer->cancel( );
             m_timer->expires_from_now( m_timeout );
-            m_timer->async_wait( m_strand->wrap( bind( &SocketImpl::connection_timeout_handler, this, shared_from_this( ), _1 ) ) );
+            m_timer->async_wait( m_strand->wrap( bind( &SocketImpl::connection_timeout_handler, shared_from_this( ), _1 ) ) );
             
 #ifdef BUILD_SSL
             
@@ -351,7 +344,7 @@ namespace restbed
         {
             m_timer->cancel( );
             m_timer->expires_from_now( m_timeout );
-            m_timer->async_wait( bind( &SocketImpl::connection_timeout_handler, this, shared_from_this( ), _1 ) );
+            m_timer->async_wait( bind( &SocketImpl::connection_timeout_handler, shared_from_this( ), _1 ) );
             
             size_t length = 0;
             
@@ -383,7 +376,7 @@ namespace restbed
         {
             m_timer->cancel( );
             m_timer->expires_from_now( m_timeout );
-            m_timer->async_wait( m_strand->wrap( bind( &SocketImpl::connection_timeout_handler, this, shared_from_this( ), _1 ) ) );
+            m_timer->async_wait( m_strand->wrap( bind( &SocketImpl::connection_timeout_handler, shared_from_this( ), _1 ) ) );
             
 #ifdef BUILD_SSL
             
@@ -452,7 +445,7 @@ namespace restbed
             }
             
             auto address = endpoint.address( );
-            auto local = address.is_v4( ) ? address.to_string( ) + ":" : "[" + address.to_string( ) + "]:";
+            auto local = address.is_v4( ) ? address.to_string( ) : "[" + address.to_string( ) + "]:";
             local += ::to_string( endpoint.port( ) );
             
             return local;
@@ -483,7 +476,7 @@ namespace restbed
             }
             
             auto address = endpoint.address( );
-            auto remote = address.is_v4( ) ? address.to_string( ) + ":" : "[" + address.to_string( ) + "]:";
+            auto remote = address.is_v4( ) ? address.to_string( ) : "[" + address.to_string( ) + "]:";
             remote += ::to_string( endpoint.port( ) );
             
             return remote;
@@ -496,17 +489,17 @@ namespace restbed
         
         void SocketImpl::connection_timeout_handler( const shared_ptr< SocketImpl > socket, const error_code& error )
         {
-            if ( error or socket == nullptr or socket->m_timer->expires_at( ) > steady_clock::now( ) )
+            if ( error )
+            {
+                return;
+            }
+            
+            if ( socket == nullptr or socket->m_timer->expires_at( ) > steady_clock::now( ) )
             {
                 return;
             }
             
             socket->close( );
-            
-            if ( m_error_handler not_eq nullptr )
-            {
-                m_error_handler( 408, runtime_error( "The socket timed out waiting for the request." ), nullptr );
-            }
         }
     }
 }

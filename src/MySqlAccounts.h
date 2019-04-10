@@ -30,8 +30,7 @@ class XmrTransaction;
 class XmrPayment;
 class XmrAccount;
 class TxSearch;
-class Table;
-class CurrentBlockchainStatus;
+
 
 
 class MysqlInputs
@@ -44,7 +43,17 @@ public:
     MysqlInputs(shared_ptr<MySqlConnector> _conn);
 
     bool
+    select(const uint64_t& address_id, vector<XmrInput>& ins);
+
+    bool
+    select_for_tx(const uint64_t& address_id, vector<XmrInput>& ins);
+
+    bool
     select_for_out(const uint64_t& output_id, vector<XmrInput>& ins);
+
+    uint64_t
+    insert(const XmrInput& in_data);
+
 };
 
 
@@ -59,7 +68,22 @@ public:
     MysqlOutpus(shared_ptr<MySqlConnector> _conn);
 
     bool
+    select(const uint64_t& address_id, vector<XmrOutput>& outs);
+
+    bool
+    select_for_tx(const uint64_t& tx_id, vector<XmrOutput>& outs);
+
+    bool
+    select(const uint64_t& out_id, XmrOutput& out);
+
+    bool
     exist(const string& output_public_key_str, XmrOutput& out);
+
+
+
+    uint64_t
+    insert(const XmrOutput& out_data);
+
 };
 
 
@@ -73,17 +97,28 @@ public:
 
     MysqlTransactions(shared_ptr<MySqlConnector> _conn);
 
+    bool
+    select(const uint64_t& address_id, vector<XmrTransaction>& txs);
+
+
     uint64_t
-    mark_spendable(const uint64_t& tx_id_no, bool spendable = true);
+    insert(const XmrTransaction& tx_data);
+
+    uint64_t
+    mark_spendable(const uint64_t& tx_id_no);
 
     uint64_t
     delete_tx(const uint64_t& tx_id_no);
 
+
     bool
     exist(const uint64_t& account_id, const string& tx_hash_str, XmrTransaction& tx);
 
-    bool
-    get_total_recieved(const uint64_t& account_id, uint64_t& amount);
+
+    uint64_t
+    get_total_recieved(const uint64_t& account_id);
+
+
 };
 
 class MysqlPayments
@@ -96,7 +131,20 @@ public:
     MysqlPayments(shared_ptr<MySqlConnector> _conn);
 
     bool
+    select(const string& address, vector<XmrPayment>& payments);
+
+    bool
     select_by_payment_id(const string& payment_id, vector<XmrPayment>& payments);
+
+
+    uint64_t
+    insert(const XmrPayment& payment_data);
+
+
+    bool
+    update(XmrPayment& payment_orginal, XmrPayment& payment_new);
+
+
 };
 
 class TxSearch;
@@ -114,53 +162,57 @@ class MySqlAccounts
 
     shared_ptr<MysqlPayments> mysql_payment;
 
-    shared_ptr<CurrentBlockchainStatus> current_bc_status;
 
 public:
 
-    MySqlAccounts(shared_ptr<CurrentBlockchainStatus> _current_bc_status);
+    MySqlAccounts();
 
-    MySqlAccounts(shared_ptr<CurrentBlockchainStatus> _current_bc_status,
-                  shared_ptr<MySqlConnector> _conn);
 
     bool
     select(const string& address, XmrAccount& account);
 
-    template <typename T>
+    bool
+    select(const int64_t& acc_id, XmrAccount& account);
+
     uint64_t
-    insert(const T& data_to_insert);
+    insert(const string& address,
+           const string& viewkey_hash,
+           DateTime const& current_blkchain_timestamp,
+           uint64_t const& current_blkchain_height = 0);
 
-    template <typename T>
     uint64_t
-    insert(const vector<T>& data_to_insert);
+    insert_tx(const XmrTransaction& tx_data);
 
-    /**
-     *
-     * @tparam T
-     * @tparam query_no which query to use, for SELECT_STMT or SELECT_STMT2
-     * @param account_id
-     * @param selected_data
-     * @return
-     */
-    template <typename T, size_t query_no = 1>
-    bool
-    select(uint64_t account_id, vector<T>& selected_data);
+    uint64_t
+    insert_output(const XmrOutput& tx_out);
 
-    template <typename T>
-    bool
-    update(T const& orginal_row, T const& new_row);
+    uint64_t
+    insert_input(const XmrInput& tx_in);
 
-    template <typename T>
     bool
-    select_for_tx(uint64_t tx_id, vector<T>& selected_data);
+    select_txs(const string& xmr_address, vector<XmrTransaction>& txs);
 
-    template <typename T>
     bool
-    select_by_primary_id(uint64_t id, T& selected_data);
+    select_txs(const uint64_t& account_id, vector<XmrTransaction>& txs);
 
     bool
     select_txs_for_account_spendability_check(const uint64_t& account_id,
                                               vector<XmrTransaction>& txs);
+
+    bool
+    select_output_with_id(const uint64_t& out_id, XmrOutput& out);
+
+    bool
+    select_outputs(const uint64_t& account_id, vector<XmrOutput>& outs);
+
+    bool
+    select_outputs_for_tx(const uint64_t& tx_id, vector<XmrOutput>& outs);
+
+    bool
+    select_inputs(const uint64_t& account_id, vector<XmrInput>& ins);
+
+    bool
+    select_inputs_for_tx(const uint64_t& tx_id, vector<XmrInput>& ins);
 
     bool
     select_inputs_for_out(const uint64_t& output_id, vector<XmrInput>& ins);
@@ -175,72 +227,34 @@ public:
     mark_tx_spendable(const uint64_t& tx_id_no);
 
     uint64_t
-    mark_tx_nonspendable(const uint64_t& tx_id_no);
+    delete_tx(const uint64_t& tx_id_no);
 
     uint64_t
-    delete_tx(const uint64_t& tx_id_no);
+    insert_payment(const XmrPayment& payment);
 
     bool
     select_payment_by_id(const string& payment_id, vector<XmrPayment>& payments);
 
     bool
-    update_payment(XmrPayment& payment_orginal, XmrPayment& payment_new);
+    select_payment_by_address(const string& address, vector<XmrPayment>& payments);
 
     bool
-    get_total_recieved(const uint64_t& account_id, uint64_t& amount);
+    select_payment_by_address(const string& address, XmrPayment& payment);
+
+    bool
+    update_payment(XmrPayment& payment_orginal, XmrPayment& payment_new);
+
+    uint64_t
+    get_total_recieved(const uint64_t& account_id);
+
+    bool
+    update(XmrAccount& acc_orginal, XmrAccount& acc_new);
 
     void
-    disconnect();
+    launch_mysql_pinging_thread();
 
     shared_ptr<MySqlConnector>
     get_connection();
-
-    /**
-     * DONT use!!!
-     *
-     * Its only useful in unit tests when you know that nothing will insert
-     * any row between calling this and using the returned id
-     *
-     * @tparam T
-     * @param table_class
-     * @return
-     */
-    template <typename T>
-    uint64_t
-    get_next_primary_id(T&& table_class)
-    {
-        static_assert(std::is_base_of<Table, std::decay_t<T>>::value, "given class is not Table");
-
-        string sql {"SELECT `auto_increment` FROM INFORMATION_SCHEMA.TABLES WHERE table_name = '"};
-        sql += table_class.table_name() + "' AND table_schema = '" +  MySqlConnector::dbname + "'";
-
-        Query query = conn->query(sql);
-        query.parse();
-
-        try
-        {
-            conn->check_if_connected();
-
-            StoreQueryResult  sr = query.store();
-
-            if (!sr.empty())
-                return sr[0][0];
-        }
-        catch (std::exception const& e)
-        {
-            MYSQL_EXCEPTION_MSG(e);
-        }
-
-        return 0;
-    }
-
-    // this is useful in unit tests, as we can inject mock CurrentBlockchainStatus
-    // after an instance of MySqlAccounts has been created.
-    void
-    set_bc_status_provider(shared_ptr<CurrentBlockchainStatus> bc_status_provider);
-
-private:
-    void _init();
 };
 
 

@@ -2,7 +2,7 @@
 // ip/basic_resolver.hpp
 // ~~~~~~~~~~~~~~~~~~~~~
 //
-// Copyright (c) 2003-2017 Christopher M. Kohlhoff (chris at kohlhoff dot com)
+// Copyright (c) 2003-2016 Christopher M. Kohlhoff (chris at kohlhoff dot com)
 //
 // Distributed under the Boost Software License, Version 1.0. (See accompanying
 // file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
@@ -20,7 +20,6 @@
 #include "asio/async_result.hpp"
 #include "asio/basic_io_object.hpp"
 #include "asio/detail/handler_type_requirements.hpp"
-#include "asio/detail/string_view.hpp"
 #include "asio/detail/throw_error.hpp"
 #include "asio/error.hpp"
 #include "asio/io_context.hpp"
@@ -270,8 +269,7 @@ public:
    * <tt>c:\\windows\\system32\\drivers\\etc\\services</tt>. Operating systems
    * may use additional locations when resolving service names.
    */
-  results_type resolve(ASIO_STRING_VIEW_PARAM host,
-      ASIO_STRING_VIEW_PARAM service)
+  results_type resolve(const std::string& host, const std::string& service)
   {
     return resolve(host, service, resolver_base::flags());
   }
@@ -309,8 +307,8 @@ public:
    * <tt>c:\\windows\\system32\\drivers\\etc\\services</tt>. Operating systems
    * may use additional locations when resolving service names.
    */
-  results_type resolve(ASIO_STRING_VIEW_PARAM host,
-      ASIO_STRING_VIEW_PARAM service, asio::error_code& ec)
+  results_type resolve(const std::string& host, const std::string& service,
+      asio::error_code& ec)
   {
     return resolve(host, service, resolver_base::flags(), ec);
   }
@@ -352,12 +350,11 @@ public:
    * <tt>c:\\windows\\system32\\drivers\\etc\\services</tt>. Operating systems
    * may use additional locations when resolving service names.
    */
-  results_type resolve(ASIO_STRING_VIEW_PARAM host,
-      ASIO_STRING_VIEW_PARAM service, resolver_base::flags resolve_flags)
+  results_type resolve(const std::string& host, const std::string& service,
+      resolver_base::flags resolve_flags)
   {
     asio::error_code ec;
-    basic_resolver_query<protocol_type> q(static_cast<std::string>(host),
-        static_cast<std::string>(service), resolve_flags);
+    basic_resolver_query<protocol_type> q(host, service, resolve_flags);
     results_type r = this->get_service().resolve(
         this->get_implementation(), q, ec);
     asio::detail::throw_error(ec, "resolve");
@@ -401,12 +398,10 @@ public:
    * <tt>c:\\windows\\system32\\drivers\\etc\\services</tt>. Operating systems
    * may use additional locations when resolving service names.
    */
-  results_type resolve(ASIO_STRING_VIEW_PARAM host,
-      ASIO_STRING_VIEW_PARAM service, resolver_base::flags resolve_flags,
-      asio::error_code& ec)
+  results_type resolve(const std::string& host, const std::string& service,
+      resolver_base::flags resolve_flags, asio::error_code& ec)
   {
-    basic_resolver_query<protocol_type> q(static_cast<std::string>(host),
-        static_cast<std::string>(service), resolve_flags);
+    basic_resolver_query<protocol_type> q(host, service, resolve_flags);
     return this->get_service().resolve(this->get_implementation(), q, ec);
   }
 
@@ -446,8 +441,8 @@ public:
    * <tt>c:\\windows\\system32\\drivers\\etc\\services</tt>. Operating systems
    * may use additional locations when resolving service names.
    */
-  results_type resolve(const protocol_type& protocol,
-      ASIO_STRING_VIEW_PARAM host, ASIO_STRING_VIEW_PARAM service)
+  results_type resolve(const protocol_type& protocol, const std::string& host,
+      const std::string& service)
   {
     return resolve(protocol, host, service, resolver_base::flags());
   }
@@ -488,9 +483,8 @@ public:
    * <tt>c:\\windows\\system32\\drivers\\etc\\services</tt>. Operating systems
    * may use additional locations when resolving service names.
    */
-  results_type resolve(const protocol_type& protocol,
-      ASIO_STRING_VIEW_PARAM host, ASIO_STRING_VIEW_PARAM service,
-      asio::error_code& ec)
+  results_type resolve(const protocol_type& protocol, const std::string& host,
+      const std::string& service, asio::error_code& ec)
   {
     return resolve(protocol, host, service, resolver_base::flags(), ec);
   }
@@ -535,14 +529,12 @@ public:
    * <tt>c:\\windows\\system32\\drivers\\etc\\services</tt>. Operating systems
    * may use additional locations when resolving service names.
    */
-  results_type resolve(const protocol_type& protocol,
-      ASIO_STRING_VIEW_PARAM host, ASIO_STRING_VIEW_PARAM service,
-      resolver_base::flags resolve_flags)
+  results_type resolve(const protocol_type& protocol, const std::string& host,
+      const std::string& service, resolver_base::flags resolve_flags)
   {
     asio::error_code ec;
     basic_resolver_query<protocol_type> q(
-        protocol, static_cast<std::string>(host),
-        static_cast<std::string>(service), resolve_flags);
+        protocol, host, service, resolve_flags);
     results_type r = this->get_service().resolve(
         this->get_implementation(), q, ec);
     asio::detail::throw_error(ec, "resolve");
@@ -589,13 +581,12 @@ public:
    * <tt>c:\\windows\\system32\\drivers\\etc\\services</tt>. Operating systems
    * may use additional locations when resolving service names.
    */
-  results_type resolve(const protocol_type& protocol,
-      ASIO_STRING_VIEW_PARAM host, ASIO_STRING_VIEW_PARAM service,
-      resolver_base::flags resolve_flags, asio::error_code& ec)
+  results_type resolve(const protocol_type& protocol, const std::string& host,
+      const std::string& service, resolver_base::flags resolve_flags,
+      asio::error_code& ec)
   {
     basic_resolver_query<protocol_type> q(
-        protocol, static_cast<std::string>(host),
-        static_cast<std::string>(service), resolve_flags);
+        protocol, host, service, resolve_flags);
     return this->get_service().resolve(this->get_implementation(), q, ec);
   }
 
@@ -694,8 +685,7 @@ public:
   template <typename ResolveHandler>
   ASIO_INITFN_RESULT_TYPE(ResolveHandler,
       void (asio::error_code, results_type))
-  async_resolve(ASIO_STRING_VIEW_PARAM host,
-      ASIO_STRING_VIEW_PARAM service,
+  async_resolve(const std::string& host, const std::string& service,
       ASIO_MOVE_ARG(ResolveHandler) handler)
   {
     return async_resolve(host, service, resolver_base::flags(),
@@ -751,8 +741,7 @@ public:
   template <typename ResolveHandler>
   ASIO_INITFN_RESULT_TYPE(ResolveHandler,
       void (asio::error_code, results_type))
-  async_resolve(ASIO_STRING_VIEW_PARAM host,
-      ASIO_STRING_VIEW_PARAM service,
+  async_resolve(const std::string& host, const std::string& service,
       resolver_base::flags resolve_flags,
       ASIO_MOVE_ARG(ResolveHandler) handler)
   {
@@ -761,8 +750,7 @@ public:
     ASIO_RESOLVE_HANDLER_CHECK(
         ResolveHandler, handler, results_type) type_check;
 
-    basic_resolver_query<protocol_type> q(static_cast<std::string>(host),
-        static_cast<std::string>(service), resolve_flags);
+    basic_resolver_query<protocol_type> q(host, service, resolve_flags);
 
 #if defined(ASIO_ENABLE_OLD_SERVICES)
     return this->get_service().async_resolve(this->get_implementation(), q,
@@ -826,9 +814,8 @@ public:
   template <typename ResolveHandler>
   ASIO_INITFN_RESULT_TYPE(ResolveHandler,
       void (asio::error_code, results_type))
-  async_resolve(const protocol_type& protocol,
-      ASIO_STRING_VIEW_PARAM host, ASIO_STRING_VIEW_PARAM service,
-      ASIO_MOVE_ARG(ResolveHandler) handler)
+  async_resolve(const protocol_type& protocol, const std::string& host,
+      const std::string& service, ASIO_MOVE_ARG(ResolveHandler) handler)
   {
     return async_resolve(protocol, host, service, resolver_base::flags(),
         ASIO_MOVE_CAST(ResolveHandler)(handler));
@@ -886,9 +873,8 @@ public:
   template <typename ResolveHandler>
   ASIO_INITFN_RESULT_TYPE(ResolveHandler,
       void (asio::error_code, results_type))
-  async_resolve(const protocol_type& protocol,
-      ASIO_STRING_VIEW_PARAM host, ASIO_STRING_VIEW_PARAM service,
-      resolver_base::flags resolve_flags,
+  async_resolve(const protocol_type& protocol, const std::string& host,
+      const std::string& service, resolver_base::flags resolve_flags,
       ASIO_MOVE_ARG(ResolveHandler) handler)
   {
     // If you get an error on the following line it means that your handler does
@@ -897,8 +883,7 @@ public:
         ResolveHandler, handler, results_type) type_check;
 
     basic_resolver_query<protocol_type> q(
-        protocol, static_cast<std::string>(host),
-        static_cast<std::string>(service), resolve_flags);
+        protocol, host, service, resolve_flags);
 
 #if defined(ASIO_ENABLE_OLD_SERVICES)
     return this->get_service().async_resolve(this->get_implementation(), q,

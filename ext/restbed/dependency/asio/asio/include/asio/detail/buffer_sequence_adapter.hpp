@@ -2,7 +2,7 @@
 // detail/buffer_sequence_adapter.hpp
 // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 //
-// Copyright (c) 2003-2017 Christopher M. Kohlhoff (chris at kohlhoff dot com)
+// Copyright (c) 2003-2016 Christopher M. Kohlhoff (chris at kohlhoff dot com)
 //
 // Distributed under the Boost Software License, Version 1.0. (See accompanying
 // file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
@@ -122,11 +122,6 @@ public:
     return count_;
   }
 
-  std::size_t total_size() const
-  {
-    return total_buffer_size_;
-  }
-
   bool all_empty() const
   {
     return total_buffer_size_ == 0;
@@ -228,11 +223,6 @@ public:
     return 1;
   }
 
-  std::size_t total_size() const
-  {
-    return total_buffer_size_;
-  }
-
   bool all_empty() const
   {
     return total_buffer_size_ == 0;
@@ -278,11 +268,6 @@ public:
   std::size_t count() const
   {
     return 1;
-  }
-
-  std::size_t total_size() const
-  {
-    return total_buffer_size_;
   }
 
   bool all_empty() const
@@ -334,11 +319,6 @@ public:
     return 1;
   }
 
-  std::size_t total_size() const
-  {
-    return total_buffer_size_;
-  }
-
   bool all_empty() const
   {
     return total_buffer_size_ == 0;
@@ -384,11 +364,6 @@ public:
   std::size_t count() const
   {
     return 1;
-  }
-
-  std::size_t total_size() const
-  {
-    return total_buffer_size_;
   }
 
   bool all_empty() const
@@ -441,11 +416,6 @@ public:
     return 2;
   }
 
-  std::size_t total_size() const
-  {
-    return total_buffer_size_;
-  }
-
   bool all_empty() const
   {
     return total_buffer_size_ == 0;
@@ -496,11 +466,6 @@ public:
   std::size_t count() const
   {
     return 2;
-  }
-
-  std::size_t total_size() const
-  {
-    return total_buffer_size_;
   }
 
   bool all_empty() const
