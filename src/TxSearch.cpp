@@ -51,11 +51,13 @@ void
 TxSearch::search()
 {
 
-    uint64_t current_timestamp = get_current_timestamp();
+    uint64_t current_timestamp = chrono::duration_cast<chrono::seconds>(
+            chrono::system_clock::now().time_since_epoch()).count();
 
     last_ping_timestamp = current_timestamp;
 
-    uint64_t blocks_lookahead = CurrentBlockchainStatus::blocks_search_lookahead;
+
+    uint64_t loop_idx {0};
 
     // we put everything in massive catch, as there are plenty ways in which
     // an exceptions can be thrown here. Mostly from mysql.
@@ -66,38 +68,52 @@ TxSearch::search()
     {
         while(continue_search)
         {
+            ++loop_idx;
+
             uint64_t loop_timestamp {current_timestamp};
 
-            uint64_t last_block_height = CurrentBlockchainStatus::current_height;
-
-            uint64_t h1 = searched_blk_no;
-            uint64_t h2 = std::min(h1 + blocks_lookahead - 1, last_block_height);
-
-            vector<block> blocks = CurrentBlockchainStatus::get_blocks_range(h1, h2);
-
-            if (blocks.empty())
+            if (loop_idx % 10 == 0)
             {
-                cout << "Cant get blocks from " << h1 << " to " << h2 << '\n';
+                // get loop time every fith iteration. no need to call it
+                // all the time.
+                loop_timestamp = chrono::duration_cast<chrono::seconds>(
+                        chrono::system_clock::now().time_since_epoch()).count();
+
+                if (loop_timestamp - last_ping_timestamp > thread_search_life)
+                {
+
+                    // also check if we caught up with current blockchain height
+                    if (searched_blk_no >= CurrentBlockchainStatus::current_height)
+                    {
+                        stop();
+                        continue;
+                    }
+                }
+            }
+
+            if (searched_blk_no > CurrentBlockchainStatus::current_height)
+            {
+                fmt::print("searched_blk_no {:d} and current_height {:d}\n",
+                           searched_blk_no, CurrentBlockchainStatus::current_height);
 
                 std::this_thread::sleep_for(
                         std::chrono::seconds(
                                 CurrentBlockchainStatus::refresh_block_status_every_seconds)
                 );
 
-                loop_timestamp = get_current_timestamp();
+                continue;
+            }
 
-                // if thread has lived longer than thread_search_li
-                // without last_ping_timestamp being updated,
-                // stop the thread
-                if (loop_timestamp - last_ping_timestamp > thread_search_life)
-                {
-                    cout << "Search thread stopped for address "<< acc->address <<'\n';
-                    stop();
-                }
+            // get block cointaining this tx
+            block blk;
+
+            if (!CurrentBlockchainStatus::get_block(searched_blk_no, blk))
+            {
+                cerr << "Cant get block of height: " + to_string(searched_blk_no) << endl;
 
                 // update current_height of blockchain, as maybe top block(s)
                 // were dropped due to reorganization.
-                //CurrentBlockchainStatus::update_current_blockchain_height();
+                CurrentBlockchainStatus::update_current_blockchain_height();
 
                 // if any txs that we already indexed got orphaned as a consequence of this
                 // MySqlAccounts::select_txs_for_account_spendability_check should
@@ -106,15 +122,22 @@ TxSearch::search()
                 continue;
             }
 
-            cout << "Analyzing " << blocks.size() << " blocks from " << h1 << " to " << h2
-                 << " out of " << last_block_height << " blocks.\n";
+            // get all txs in the block
+            list <cryptonote::transaction> blk_txs;
 
-            vector<CurrentBlockchainStatus::txs_tuple_t> txs_data;
-
-            if (!CurrentBlockchainStatus::get_txs_in_blocks(blocks, txs_data))
+            if (!CurrentBlockchainStatus::get_block_txs(blk, blk_txs))
             {
-                cout << "Cant get tx in blocks from " << h1 << " to " << h2 << '\n';
-                return;
+                throw TxSearchException("Cant get transactions in block: " + to_string(searched_blk_no));
+            }
+
+
+            if (searched_blk_no % 100 == 0)
+            {
+                // print status every 100th block
+
+                cout << " - searching block " << searched_blk_no
+                     << " of hash: "
+                     << searched_blk_no << get_block_hash(blk) << '\n';
             }
 
             // we will only create mysql DateTime object once, anything is found
@@ -136,33 +159,30 @@ TxSearch::search()
             // mixin purposes. Thus, we sent to the front end the list of key images
             // that we think are yours, and the frontend, because it has spend key,
             // can filter out false positives.
-            //for (transaction& tx: txs)
-            for (auto const& tx_tuple: txs_data)
+            for (transaction& tx: blk_txs)
             {
-                crypto::hash const& tx_hash = std::get<0>(tx_tuple);
-                transaction const& tx       = std::get<1>(tx_tuple);
-                uint64_t blk_height         = std::get<2>(tx_tuple);
-                uint64_t blk_timestamp      = std::get<3>(tx_tuple);
-                bool is_coinbase            = std::get<4>(tx_tuple);
-
-                //cout << "\n\n\n" << blk_height << '\n';
-
                 // Class that is responsible for identification of our outputs
                 // and inputs in a given tx.
-                OutputInputIdentification oi_identification {&address, &viewkey, &tx,
-                                                             tx_hash, is_coinbase};
+                OutputInputIdentification oi_identification {&address, &viewkey, &tx};
 
                 // flag indicating whether the txs in the given block are spendable.
                 // this is true when block number is more than 10 blocks from current
                 // blockchain height.
 
                 bool is_spendable = CurrentBlockchainStatus::is_tx_unlocked(
-                        tx.unlock_time, blk_height);
+                        tx.unlock_time, searched_blk_no);
 
 
                 // this is id of txs in lmdb blockchain table.
                 // it will be used mostly to sort txs in the frontend.
                 uint64_t blockchain_tx_id {0};
+
+                if (!CurrentBlockchainStatus::tx_exist(oi_identification.tx_hash, blockchain_tx_id))
+                {
+                    cerr << "Tx " << oi_identification.get_tx_hash_str()
+                         << "not found in blockchain !" << '\n';
+                    continue;
+                }
 
                 // FIRSt step.
                 oi_identification.identify_outputs();
@@ -179,12 +199,45 @@ TxSearch::search()
                 // save them into mysql.
                 if (!oi_identification.identified_outputs.empty())
                 {
+//                     before adding this tx and its outputs to mysql
+//                     check if it already exists. So that we dont
+//                     do it twice.
+//
+//                     2018:02:01 Dont know why I added this before?
+//                     this results in incorrect balances in some cases
+//                     as it removes already existing tx data? Dont know
+//                     why it was added.
+//                     Maybe I added it to enable rescanning blockchain? Thus
+//                     it would be deleting already exisitng tx when rescanning
+//                     blockchain
+//
+//                    XmrTransaction tx_data_existing;
+//
+//                    if (xmr_accounts->tx_exists(acc->id,
+//                                                oi_identification.tx_hash_str,
+//                                                tx_data_existing))
+//                    {
+//                        cout << "\nTransaction " << oi_identification.tx_hash_str
+//                             << " already present in mysql"
+//                             << endl;
+//
+//                        // if tx is already present for that user,
+//                        // we remove it, as we get it data from scrach
+//
+//                        if (xmr_accounts->delete_tx(tx_data_existing.id) == 0)
+//                        {
+//                            string msg = fmt::format("xmr_accounts->delete_tx(%d)",
+//                                                     tx_data_existing.id);
+//                            cerr << msg << endl;
+//                            throw TxSearchException(msg);
+//                        }
+//                    }
 
                     if (!blk_timestamp_mysql_format)
                     {
                         blk_timestamp_mysql_format
                                 = unique_ptr<DateTime>(
-                                        new DateTime(static_cast<time_t>(blk_timestamp)));
+                                        new DateTime(static_cast<time_t>(blk.timestamp)));
                     }
 
                     if (!mysql_transaction)
@@ -195,26 +248,7 @@ TxSearch::search()
                                            new mysqlpp::Transaction(
                                                    xmr_accounts->get_connection()
                                                            ->get_connection()));
-
-                        // when we rescan blockchain some txs can already
-                        // be present in the mysql. So remove them, and their
-                        // associated data in that case to repopulate fresh tx data
-                        if (!delete_existing_tx_if_exists(oi_identification.get_tx_hash_str()))
-                            throw TxSearchException("Cant delete tx " + oi_identification.tx_hash_str);
-
                     }
-
-
-                    if (!CurrentBlockchainStatus::tx_exist(tx_hash, blockchain_tx_id))
-                    {
-                        cerr << "Tx " << oi_identification.get_tx_hash_str()
-                             << " " << pod_to_hex(tx_hash)
-                             << " not found in blockchain !" << '\n';
-                        throw TxSearchException("Cant get tx from blockchain: " + pod_to_hex(tx_hash));
-                    }
-
-                    cout << " - found some outputs in block " << blk_height
-                         << ", tx: " << oi_identification.get_tx_hash_str() << '\n';
 
 
                     XmrTransaction tx_data;
@@ -234,7 +268,7 @@ TxSearch::search()
                                                  // for coinbase tx it is 60 blocks
                     tx_data.unlock_time      = tx.unlock_time;
 
-                    tx_data.height           = blk_height;
+                    tx_data.height           = searched_blk_no;
                     tx_data.coinbase         = oi_identification.tx_is_coinbase;
                     tx_data.is_rct           = oi_identification.is_rct;
                     tx_data.rct_type         = oi_identification.rct_type;
@@ -249,7 +283,7 @@ TxSearch::search()
 
                     // get amount specific (i.e., global) indices of outputs
                     if (!CurrentBlockchainStatus::get_amount_specific_indices(
-                            tx_hash, amount_specific_indices))
+                            oi_identification.tx_hash, amount_specific_indices))
                     {
                         cerr << "cant get_amount_specific_indices!" << endl;
                         throw TxSearchException("cant get_amount_specific_indices!");
@@ -258,11 +292,9 @@ TxSearch::search()
                     if (tx_mysql_id == 0)
                     {
                         //cerr << "tx_mysql_id is zero!" << endl;
-                        throw TxSearchException("tx_mysql_id is zero!");
+                        //throw TxSearchException("tx_mysql_id is zero!");
                         //todo what should be done when insert_tx fails?
                     }
-
-                    vector<XmrOutput> outputs_found;
 
                     // now add the found outputs into Outputs tables
                     for (auto& out_info: oi_identification.identified_outputs)
@@ -271,7 +303,7 @@ TxSearch::search()
 
                         out_data.account_id   = acc->id;
                         out_data.tx_id        = tx_mysql_id;
-                        out_data.out_pub_key  = pod_to_hex(out_info.pub_key);
+                        out_data.out_pub_key  = out_info.pub_key;
                         out_data.tx_pub_key   = oi_identification.get_tx_pub_key_str();
                         out_data.amount       = out_info.amount;
                         out_data.out_index    = out_info.idx_in_tx;
@@ -282,25 +314,21 @@ TxSearch::search()
                         out_data.mixin        = tx_data.mixin;
                         out_data.timestamp    = tx_data.timestamp;
 
-                        outputs_found.push_back(out_data);
+                        // insert output into mysql's outputs table
+                        uint64_t out_mysql_id = xmr_accounts->insert_output(out_data);
+
+                        if (out_mysql_id == 0)
+                        {
+                            //cerr << "out_mysql_id is zero!" << endl;
+                            //todo what should be done when insert_tx fails?
+                        }
 
                         {
-                            // add the outputs found into known_outputs_keys map
                             std::lock_guard<std::mutex> lck (getting_known_outputs_keys);
-                            known_outputs_keys.insert({out_info.pub_key, out_info.amount});
+                            known_outputs_keys.push_back(make_pair(out_info.pub_key, out_info.amount));
                         }
 
                     } //  for (auto& out_info: oi_identification.identified_outputs)
-
-
-                    // insert all outputs found into mysql's outputs table
-                    uint64_t no_rows_inserted = xmr_accounts->insert_output(outputs_found);
-
-                    if (no_rows_inserted == 0)
-                    {
-                        //cerr << "out_mysql_id is zero!" << endl;
-                        throw TxSearchException("no_rows_inserted is zero!");
-                    }
 
                 } // if (!found_mine_outputs.empty())
 
@@ -318,11 +346,12 @@ TxSearch::search()
                     // so now, go over those inputs, and check
                     // get detail info for each found mixin output from database
 
+
                     if (!blk_timestamp_mysql_format)
                     {
                         blk_timestamp_mysql_format
                                 = unique_ptr<DateTime>(
-                                new DateTime(static_cast<time_t>(blk_timestamp)));
+                                new DateTime(static_cast<time_t>(blk.timestamp)));
                     }
 
                     if (!mysql_transaction)
@@ -334,28 +363,8 @@ TxSearch::search()
                                         xmr_accounts->get_connection()
                                                 ->get_connection()));
 
-                        // when we rescan blockchain some txs can already
-                        // be present in the mysql. So remove them, and their
-                        // associated data in that case to repopulate fresh tx data
-
-                        // this will only execture if no outputs were found
-                        // above. So there is no risk of deleting same tx twice
-                        if (!delete_existing_tx_if_exists(oi_identification.get_tx_hash_str()))
-                            throw TxSearchException("Cant delete tx " + oi_identification.tx_hash_str);
                     }
 
-                    if (blockchain_tx_id == 0)
-                    {
-                        if (!CurrentBlockchainStatus::tx_exist(oi_identification.tx_hash, blockchain_tx_id))
-                        {
-                            cerr << "Tx " << oi_identification.get_tx_hash_str()
-                                 << "not found in blockchain !" << '\n';
-                            throw TxSearchException("Cant get tx from blockchain: " + pod_to_hex(tx_hash));
-                        }
-                    }
-
-                    cout << " - found some possible inputs in block " << blk_height
-                         << ", tx: " << oi_identification.get_tx_hash_str() << '\n';
 
                     vector<XmrInput> inputs_found;
 
@@ -363,9 +372,10 @@ TxSearch::search()
                     {
                         XmrOutput out;
 
-                        if (xmr_accounts->output_exists(pod_to_hex(in_info.out_pub_key), out))
+                        if (xmr_accounts->output_exists(in_info.out_pub_key, out))
                         {
-                            //cout << "input uses some mixins which are our outputs" << out << '\n';
+                            cout << "input uses some mixins which are our outputs"
+                                 << out << '\n';
 
                             // seems that this key image is ours.
                             // so get it information from database into XmrInput
@@ -418,7 +428,7 @@ TxSearch::search()
                             tx_data.total_received   = 0; // because this is spending, total_recieved is 0
                             tx_data.total_sent       = total_sent;
                             tx_data.unlock_time      = tx.unlock_time;
-                            tx_data.height           = blk_height;
+                            tx_data.height           = searched_blk_no;
                             tx_data.coinbase         = oi_identification.tx_is_coinbase;
                             tx_data.is_rct           = oi_identification.is_rct;
                             tx_data.rct_type         = oi_identification.rct_type;
@@ -433,7 +443,7 @@ TxSearch::search()
                             if (tx_mysql_id == 0)
                             {
                                 //cerr << "tx_mysql_id is zero!" << endl;
-                                throw TxSearchException("tx_mysql_id is zero!");
+                                //throw TxSearchException("tx_mysql_id is zero!");
                                 // it did not insert this tx, because maybe it already
                                 // exisits in the MySQL. So maybe can now
                                 // check if we have it and get tx_mysql_id this way.
@@ -442,16 +452,14 @@ TxSearch::search()
 
                         } //   if (tx_mysql_id == 0)
 
-                        // save all input found into database at once
-                        // but first update tx_mysql_id for these inputs
+                        // save all input found into database
                         for (XmrInput& in_data: inputs_found)
+                        {
                             in_data.tx_id = tx_mysql_id; // set tx id now. before we made it 0
 
-                        uint64_t no_rows_inserted = xmr_accounts->insert_input(inputs_found);
+                            uint64_t in_mysql_id = xmr_accounts->insert_input(in_data);
 
-                        if (no_rows_inserted == 0)
-                        {
-                            throw TxSearchException("no_rows_inserted is zero!");
+                            //todo what shoud we do when insert_input fails?
                         }
 
                     } //  if (!inputs_found.empty())
@@ -465,26 +473,38 @@ TxSearch::search()
                 if (mysql_transaction)
                     mysql_transaction->commit();
 
-            } // for (auto const& tx_pair: txs_map)
+            } // for (const transaction& tx: blk_txs)
 
-            // update scanned_block_height every given interval
-            // or when we reached top of the blockchain
 
-            XmrAccount updated_acc = *acc;
-
-            updated_acc.scanned_block_height    = h2;
-            updated_acc.scanned_block_timestamp = DateTime(static_cast<time_t>(blocks.back().timestamp));
-
-            if (xmr_accounts->update(*acc, updated_acc))
+            if ((loop_timestamp - current_timestamp > UPDATE_SCANNED_HEIGHT_INTERVAL)
+                || searched_blk_no == CurrentBlockchainStatus::current_height)
             {
-                // iff success, set acc to updated_acc;
-                //cout << "scanned_block_height updated\n";
-                *acc = updated_acc;
+                // update scanned_block_height every given interval
+                // or when we reached top of the blockchain
+
+                XmrAccount updated_acc = *acc;
+
+                if (!blk_timestamp_mysql_format)
+                {
+                    blk_timestamp_mysql_format
+                            = unique_ptr<DateTime>(
+                            new DateTime(static_cast<time_t>(blk.timestamp)));
+                }
+
+                updated_acc.scanned_block_height    = searched_blk_no;
+                updated_acc.scanned_block_timestamp = *blk_timestamp_mysql_format;
+
+                if (xmr_accounts->update(*acc, updated_acc))
+                {
+                    // iff success, set acc to updated_acc;
+                    cout << "scanned_block_height updated"  << endl;
+                    *acc = updated_acc;
+                }
+
+                current_timestamp = loop_timestamp;
             }
 
-            //current_timestamp = loop_timestamp;
-
-            searched_blk_no = h2 + 1;
+            ++searched_blk_no;
 
         } // while(continue_search)
 
@@ -505,9 +525,6 @@ TxSearch::search()
     {
         cerr << "Unknown exception in TxSearch for " << acc->address << '\n';
     }
-
-    // it will stop anyway, but just call it so we get info message pritened out
-    stop();
 }
 
 void
@@ -534,14 +551,7 @@ TxSearch::get_searched_blk_no() const
     return searched_blk_no;
 }
 
-inline uint64_t
-TxSearch::get_current_timestamp() const
-{
-   return  chrono::duration_cast<chrono::seconds>(
-          chrono::system_clock::now().time_since_epoch()).count();
-}
-
-void
+    void
 TxSearch::ping()
 {
     cout << "new last_ping_timestamp: " << last_ping_timestamp << endl;
@@ -565,16 +575,12 @@ TxSearch::populate_known_outputs()
     {
         for (const XmrOutput& out: outs)
         {
-            public_key out_pub_key;
-
-            hex_to_pod(out.out_pub_key, out_pub_key);
-
-            known_outputs_keys[out_pub_key] = out.amount;
+            known_outputs_keys.push_back(make_pair(out.out_pub_key, out.amount));
         }
     }
 }
 
-TxSearch::known_outputs_t
+vector<pair<string, uint64_t>>
 TxSearch::get_known_outputs_keys()
 {
     std::lock_guard<std::mutex> lck (getting_known_outputs_keys);
@@ -589,7 +595,7 @@ TxSearch::find_txs_in_mempool(
 
     uint64_t current_height = CurrentBlockchainStatus::get_current_blockchain_height();
 
-    known_outputs_t known_outputs_keys_copy = get_known_outputs_keys();
+    vector<pair<string, uint64_t>> known_outputs_keys_copy = get_known_outputs_keys();
 
     // since find_txs_in_mempool can be called outside of this thread,
     // we need to use local connection. we cant use connection that the
@@ -607,13 +613,9 @@ TxSearch::find_txs_in_mempool(
 
         const transaction& tx = mtx.second;
 
-        const crypto::hash tx_hash = get_transaction_hash(tx);
-        const bool coinbase = is_coinbase(tx);
-
         // Class that is resposnible for idenficitaction of our outputs
         // and inputs in a given tx.
-        OutputInputIdentification oi_identification {&address, &viewkey, &tx,
-                                                     tx_hash, coinbase};
+        OutputInputIdentification oi_identification {&address, &viewkey, &tx};
 
         // FIRSt step. to search for the incoming xmr, we use address, viewkey and
         // outputs public key.
@@ -675,7 +677,7 @@ TxSearch::find_txs_in_mempool(
                 // tx public key and its index in that tx
                 XmrOutput out;
 
-                if (local_xmr_accounts->output_exists(pod_to_hex(in_info.out_pub_key), out))
+                if (local_xmr_accounts->output_exists(in_info.out_pub_key, out))
                 {
                     total_sent += out.amount;
 
@@ -764,29 +766,6 @@ TxSearch::set_search_thread_life(uint64_t life_seconds)
 {
     thread_search_life = life_seconds;
 }
-
-bool
-TxSearch::delete_existing_tx_if_exists(string const& tx_hash)
-{
-    XmrTransaction tx_data_existing;
-
-    if (xmr_accounts->tx_exists(acc->id, tx_hash, tx_data_existing))
-    {
-        cout << "\nTransaction " << tx_hash << " already present in mysql, so remove it\n";
-
-        // if tx is already present for that user,
-        // we remove it, as we get it data from scrach
-
-        if (xmr_accounts->delete_tx(tx_data_existing.id) == 0)
-        {
-            cerr << "cant remove tx " << tx_hash << '\n';
-            return false;
-        }
-    }
-
-    return true;
-}
-
 
 // default value of static veriables
 uint64_t TxSearch::thread_search_life {600};

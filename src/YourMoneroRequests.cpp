@@ -1119,9 +1119,6 @@ YourMoneroRequests::import_recent_wallet_request(const shared_ptr< Session > ses
     no_blocks_to_import = std::min(no_blocks_to_import,
                                    CurrentBlockchainStatus::max_number_of_blocks_to_import);
 
-    no_blocks_to_import = std::min(no_blocks_to_import,
-                                   CurrentBlockchainStatus::get_current_blockchain_height());
-
     XmrAccount acc;
 
     if (xmr_accounts->select(xmr_address, acc))
@@ -1131,7 +1128,7 @@ YourMoneroRequests::import_recent_wallet_request(const shared_ptr< Session > ses
         // make sure scanned_block_height is larger than  no_blocks_to_import so we dont
         // end up with overflowing uint64_t.
 
-        if (updated_acc.scanned_block_height >= no_blocks_to_import)
+        if (updated_acc.scanned_block_height > no_blocks_to_import)
         {
             // repetead calls to import_recent_wallet_request will be moving the scanning backward.
             // not sure yet if any protection is needed to make sure that a user does not
@@ -1354,8 +1351,7 @@ YourMoneroRequests::get_tx(const shared_ptr< Session > session, const Bytes & bo
         // implementation in the frontend.
         if (CurrentBlockchainStatus::get_xmr_address_viewkey(xmr_address, address_info, viewkey))
         {
-            OutputInputIdentification oi_identification {&address_info, &viewkey, &tx,
-                                                         tx_hash, coinbase};
+            OutputInputIdentification oi_identification {&address_info, &viewkey, &tx};
 
             oi_identification.identify_outputs();
 
@@ -1448,7 +1444,7 @@ YourMoneroRequests::get_tx(const shared_ptr< Session > session, const Bytes & bo
 
                     // we have to redo this info from basically from scrach.
 
-                    unordered_map<public_key, uint64_t> known_outputs_keys;
+                    vector<pair<string, uint64_t>> known_outputs_keys;
 
                     if (CurrentBlockchainStatus::get_known_outputs_keys(
                             xmr_address, known_outputs_keys))
@@ -1460,7 +1456,7 @@ YourMoneroRequests::get_tx(const shared_ptr< Session > session, const Bytes & bo
                         // Class that is resposnible for idenficitaction of our outputs
                         // and inputs in a given tx.
                         OutputInputIdentification oi_identification
-                                {&address_info, &viewkey, &tx, tx_hash, coinbase};
+                                {&address_info, &viewkey, &tx};
 
                         // no need mutex here, as this will be exectued only after
                         // the above. there is no threads here.
@@ -1478,9 +1474,7 @@ YourMoneroRequests::get_tx(const shared_ptr< Session > session, const Bytes & bo
                             // tx public key and its index in that tx
                             XmrOutput out;
 
-                            string out_pub_key = pod_to_hex(in_info.out_pub_key);
-
-                            if (xmr_accounts->output_exists(out_pub_key, out))
+                            if (xmr_accounts->output_exists(in_info.out_pub_key, out))
                             {
                                 total_spent += out.amount;
 
@@ -1663,6 +1657,8 @@ YourMoneroRequests::login_and_start_search_thread(
 
             if (CurrentBlockchainStatus::start_tx_search_thread(acc))
             {
+                cout << "Search thread started" << endl;
+
                 j_response["status"]      = "success";
                 j_response["new_address"] = false;
 
